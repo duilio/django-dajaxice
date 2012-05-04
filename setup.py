@@ -8,7 +8,7 @@ setup(
     description = "Agnostic and easy to use ajax library for django",
     download_url = "http://cloud.github.com/downloads/jorgebastida/django-dajaxice/django-dajaxice-0.2.tar.gz",
     url = "http://dajaxproject.com",
-    packages= ['dajaxice', 'dajaxice.templatetags', 'dajaxice.core', 'dajaxice.management', 'dajaxice.management.commands'],
+    packages= ['dajaxice', 'dajaxice.templatetags', 'dajaxice.core'],
     package_data = {'dajaxice': ['templates/dajaxice/*']},
     long_description="""\
 Easy to use AJAX library for django, all the presentation logic
