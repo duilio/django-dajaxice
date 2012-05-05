@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------
-# Copyright (c) 2012 David Charbonnier
+# Copyright (c) 2012 David Charbonnier, Maurizio Sambati
 # All rights reserved.
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are
@@ -31,48 +31,86 @@
 #  DAMAGE.
 #----------------------------------------------------------------------
 
+import os
+
 from django.core.files.storage import Storage
 from dajaxice.core import DajaxiceRequest
 from django.template import loader, Context
-from django.core.files.temp import NamedTemporaryFile
 from django.core.files import File
+from django.utils.encoding import smart_str
+from django.utils.hashcompat import md5_constructor
+from django.conf import settings
+
+
+def get_hexdigest(plaintext, length=None):
+    digest = md5_constructor(smart_str(plaintext)).hexdigest()
+    if length:
+        return digest[:length]
+    return digest
+
+
+def get_cache_path():
+    root = getattr(settings, 'DAJAXICE_STORAGE_CACHE_ROOT', None)
+    if root is None:
+        root = getattr(settings, 'STATIC_ROOT', None)
+        if root is None:
+            root = settings.MEDIA_ROOT
+
+    dir = getattr(settings, 'DAJAXICE_STORAGE_CACHE_DIR', 'CACHE')
+    return os.path.join(root, dir)
+
 
 class DajaxiceStorage(Storage):
-    
     def __init__(self):
-        self._tmp_file = None #keep reference to avoid tmp file deletion
-        
+        #keep reference to avoid tmp file deletion
+        self._filename = None
+
     def _open(self, name, mode='rb'):
         return File(open(self.path(name), mode))
-    
-    def save(self, name, content): 
+
+    def save(self, name, content):
         raise NotImplementedError("This backend doesn't support save.")
-    
+
     def get_valid_name(self, name):
-        raise NotImplementedError("This backend doesn't support get_valid_name.")
-    
+        raise NotImplementedError("This backend doesn't support"
+                                  " get_valid_name.")
+
     def get_available_name(self, name):
-        raise NotImplementedError("This backend doesn't support get_available_name.")
-    
+        raise NotImplementedError("This backend doesn't support"
+                                  " get_available_name.")
+
     def path(self, name):
         if name == "":
             return ""
         if name != 'dajaxice/dajaxice.core.js':
             return
-        context = Context({'dajaxice_js_functions': DajaxiceRequest.get_js_functions(),
-            'DAJAXICE_URL_PREFIX': DajaxiceRequest.get_media_prefix(),
-            'DAJAXICE_XMLHTTPREQUEST_JS_IMPORT': DajaxiceRequest.get_xmlhttprequest_js_import(),
-            'DAJAXICE_JSON2_JS_IMPORT': DajaxiceRequest.get_json2_js_import(),
-            'DAJAXICE_EXCEPTION': DajaxiceRequest.get_exception_message(),
-            'DAJAXICE_JS_DOCSTRINGS': DajaxiceRequest.get_js_docstrings()})
-        template  = loader.get_template('dajaxice/dajaxice.core.js')
-        self._tmp_file = NamedTemporaryFile(suffix='.js')
-        self._tmp_file.write(template.render(context))
-        self._tmp_file.flush()
-        return self._tmp_file.name
-    
-    def exists(self,path):
+
+        context = Context({
+                'dajaxice_js_functions': DajaxiceRequest.get_js_functions(),
+                'DAJAXICE_URL_PREFIX': DajaxiceRequest.get_media_prefix(),
+                'DAJAXICE_XMLHTTPREQUEST_JS_IMPORT': DajaxiceRequest\
+                    .get_xmlhttprequest_js_import(),
+                'DAJAXICE_JSON2_JS_IMPORT': DajaxiceRequest\
+                    .get_json2_js_import(),
+                'DAJAXICE_EXCEPTION': DajaxiceRequest.get_exception_message(),
+                'DAJAXICE_JS_DOCSTRINGS': DajaxiceRequest.get_js_docstrings(),
+        })
+
+        template = loader.get_template('dajaxice/dajaxice.core.js')
+        content = template.render(context)
+        digest = get_hexdigest(content)
+
+        filename = os.path.join(get_cache_path(),
+                                'dajaxice.core.%s.js' % digest)
+        if self._filename is None or self._filename != filename:
+            with open(filename, 'wb') as fout:
+                fout.write(content)
+            self._filename = filename
+
+        return filename
+
+    def exists(self, path):
         return path == 'dajaxice/dajaxice.core.js'
-    
+
     def listdir(self, path):
         return [], ['dajaxice/dajaxice.core.js']
